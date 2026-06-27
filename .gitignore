@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Virtual environments
+env/
+venv/
+.venv/
+ENV/
+
+# Environment variables — JANGAN commit file ini
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs & cache
+*.log
+logs/
+.cache/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
