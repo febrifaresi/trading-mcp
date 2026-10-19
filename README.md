@@ -217,10 +217,36 @@ atau live tapi API key kosong).
 | Circuit breaker rugi harian | `MAX_DAILY_LOSS_USD` | $25 — begitu tercapai, entry baru diblokir otomatis sampai hari UTC berikutnya |
 | Max posisi terbuka bersamaan | `MAX_OPEN_POSITIONS` | 3 |
 | Risk per trade (dari balance) | `RISK_PER_TRADE_PCT` | 1% |
-| Minimum confluence score untuk entry | `MIN_CONFLUENCE_SCORE` | 6/8 |
+| Minimum confluence score untuk entry | `MIN_CONFLUENCE_SCORE` | 6/8 (hanya berlaku di `SIGNAL_SOURCE=rules`) |
 
 Semua posisi pakai stop-loss & take-profit berbasis ATR (`ATR_STOP_MULTIPLIER`,
 `ATR_TARGET_MULTIPLIER`) yang dihitung otomatis saat entry — bukan opsional.
+
+Tabel di atas berlaku **sama persis**, apa pun `SIGNAL_SOURCE`-nya di bawah — LLM
+tidak pernah punya akses untuk mengubah atau melewati batas-batas ini.
+
+### Sumber sinyal: `rules` vs `llm`
+
+```
+SIGNAL_SOURCE=rules   # default — confluence score deterministik (lihat README bagian atas)
+SIGNAL_SOURCE=llm     # Qwen (via OpenRouter) baca indikator + berita terbaru, lalu pilih arah
+```
+
+Di mode `llm`:
+- Model dapat konteks teknikal yang sama persis dengan mode `rules` (trend bias,
+  confluence score, alasan) **plus** headline berita crypto terbaru (RSS publik,
+  tidak butuh API key berita terpisah).
+- Model **hanya** boleh menjawab arah: `LONG_ENTRY`, `EXIT`, atau `NONE` — tidak
+  pernah menentukan ukuran posisi, stop-loss, atau mematikan circuit breaker.
+  Itu semua tetap kerjaan `RiskManager` yang deterministik.
+- Kalau panggilan ke OpenRouter gagal (timeout, error, jawaban bukan JSON valid,
+  atau model menjawab arah yang tidak dikenal) — fallback otomatis ke `NONE`
+  (tidak ada aksi). Bot tidak pernah "menebak" kalau LLM-nya bermasalah.
+- Butuh `OPENROUTER_API_KEY` diisi di `.env`. Bot menolak start (`ValueError`
+  jelas, bukan error nyasar) kalau `SIGNAL_SOURCE=llm` tapi key kosong.
+- Cek `LLM_MODEL` di `.env.example` terhadap katalog model terbaru di
+  [openrouter.ai/models](https://openrouter.ai/models) sebelum live — ID model
+  suka berubah penamaannya.
 
 ### Kill switch
 
@@ -273,8 +299,10 @@ Claude Desktop
 run_bot.py  (automation — eksekusi order sungguhan, terpisah dari MCP server)
     │
     └─ AutomationBot (loop polling per watchlist)
-          ├── SignalGenerator    → reuse TechnicalEngine + StructureEngine + confluence_score
-          ├── RiskManager        → kill switch, circuit breaker, position sizing, state (JSON)
+          ├── SignalGenerator    → SIGNAL_SOURCE=rules: reuse TechnicalEngine + StructureEngine + confluence_score
+          ├── LLMSignalGenerator → SIGNAL_SOURCE=llm: konteks sama + NewsFeed (RSS) → LLMAdvisor (Qwen/OpenRouter)
+          │                         LLM cuma pilih arah — tidak pernah sentuh sizing/risk
+          ├── RiskManager        → kill switch, circuit breaker, position sizing, state (JSON) — SAMA untuk rules & llm
           ├── OrderExecutor      → risk check → (dry_run: simulasi | live: ccxt order)
           ├── ExchangeClient     → wrapper ccxt.bybit (testnet toggle)
           └── TradeLogger        → audit log JSONL (trade_log.jsonl)

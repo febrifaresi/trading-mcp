@@ -65,6 +65,14 @@ class ExecutionConfig:
     # Balance simulasi dipakai saat dry_run TANPA API key (supaya bisa dicoba tanpa akun exchange).
     dry_run_balance_usd: float = 1000.0
 
+    # --- Signal source: "rules" (default, deterministic confluence score) atau "llm" (Qwen via OpenRouter) ---
+    signal_source: str = "rules"
+    openrouter_api_key: str = ""
+    llm_model: str = "qwen/qwen3-30b-a3b-instruct-2507"
+    llm_timeout_seconds: float = 20.0
+    news_max_headlines: int = 8
+    news_lookback_hours: int = 24
+
     @property
     def is_live(self) -> bool:
         return self.trading_mode.strip().lower() == "live"
@@ -98,7 +106,22 @@ class ExecutionConfig:
             state_path=os.getenv("EXECUTION_STATE_PATH", "execution_state.json"),
             log_path=os.getenv("TRADE_LOG_PATH", "trade_log.jsonl"),
             dry_run_balance_usd=_float_env("DRY_RUN_BALANCE_USD", 1000.0),
+            signal_source=os.getenv("SIGNAL_SOURCE", "rules"),
+            openrouter_api_key=os.getenv("OPENROUTER_API_KEY", ""),
+            llm_model=os.getenv("LLM_MODEL", "qwen/qwen3-30b-a3b-instruct-2507"),
+            llm_timeout_seconds=_float_env("LLM_TIMEOUT_SECONDS", 20.0),
+            news_max_headlines=_int_env("NEWS_MAX_HEADLINES", 8),
+            news_lookback_hours=_int_env("NEWS_LOOKBACK_HOURS", 24),
         )
+
+    def validate_signal_source(self) -> None:
+        if self.signal_source not in ("rules", "llm"):
+            raise ValueError(f"SIGNAL_SOURCE tidak dikenal: '{self.signal_source}' (harus 'rules' atau 'llm')")
+        if self.signal_source == "llm" and not self.openrouter_api_key:
+            raise ValueError(
+                "SIGNAL_SOURCE=llm tapi OPENROUTER_API_KEY belum di-set. "
+                "Isi dulu di .env, atau pakai SIGNAL_SOURCE=rules."
+            )
 
     def validate_for_live(self) -> None:
         """Pengecekan wajib sebelum boleh jalan di mode live. Raise jika tidak lolos."""

@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from .config import ExecutionConfig
 from .exchange_client import ExchangeClient
+from .llm_signal_generator import LLMSignalGenerator
 from .order_executor import OrderExecutor
 from .risk_manager import RiskManager
 from .signal_generator import SignalGenerator
@@ -19,9 +20,10 @@ class AutomationBot:
     def __init__(self, config: ExecutionConfig):
         self.config = config
 
+        # Gagal cepat di startup kalau config tidak valid — jangan nunggu
+        # sampai ada sinyal baru buat nemu masalahnya.
+        config.validate_signal_source()
         if config.is_live:
-            # Gagal cepat di startup kalau config live tidak valid — jangan nunggu
-            # sampai ada sinyal baru nemu masalahnya.
             config.validate_for_live()
 
         exchange_client = None
@@ -29,7 +31,9 @@ class AutomationBot:
             exchange_client = ExchangeClient(config)
 
         risk_manager = RiskManager(config)
-        signal_generator = SignalGenerator(config)
+        signal_generator = (
+            LLMSignalGenerator(config) if config.signal_source == "llm" else SignalGenerator(config)
+        )
         logger = TradeLogger(config.log_path)
 
         self.executor = OrderExecutor(
@@ -56,6 +60,8 @@ class AutomationBot:
     def run_forever(self, max_iterations: int | None = None) -> None:
         mode = "LIVE — UANG SUNGGUHAN" if self.config.is_live else "DRY_RUN (simulasi, tidak ada order sungguhan)"
         print(f"=== Trading Automation Bot — mode: {mode} ===")
+        print(f"Signal source: {self.config.signal_source}"
+              + (f" ({self.config.llm_model})" if self.config.signal_source == "llm" else " (confluence score deterministik)"))
         print(f"Exchange     : {self.config.exchange_id} (testnet={self.config.use_testnet})")
         print(f"Watchlist    : {', '.join(self.config.watchlist)}")
         print(f"Poll interval: {self.config.poll_interval_seconds}s")
