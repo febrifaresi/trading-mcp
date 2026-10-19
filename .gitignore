@@ -43,3 +43,8 @@ logs/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Automation bot runtime artifacts — jangan commit, ini state/log lokal
+KILL_SWITCH
+execution_state.json
+trade_log.jsonl

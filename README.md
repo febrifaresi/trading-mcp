@@ -185,6 +185,71 @@ Combined with classic technical indicators (EMA stack, RSI, MACD, Bollinger Band
 
 ---
 
+## ⚠️ Automation (eksekusi order sungguhan)
+
+Selain MCP server (analisa saja, tidak pernah eksekusi), repo ini juga punya
+**automation bot** (`run_bot.py`) yang bisa scan pasar dan **mengirim order
+sungguhan ke Bybit secara otonom** — tanpa perlu kamu di depan chat.
+
+**Ini menyentuh uang asli. Baca bagian ini sebelum menyalakan apa pun.**
+
+### Default-nya aman
+
+- `TRADING_MODE=dry_run` — bot jalan penuh (fetch data, hitung sinyal, "eksekusi"),
+  tapi order **tidak pernah** benar-benar dikirim ke exchange. Semua disimulasikan
+  dan dicatat ke `trade_log.jsonl` persis seperti kalau live, supaya kamu bisa
+  evaluasi strategi dulu sebelum pakai uang sungguhan.
+- `BYBIT_TESTNET=true` — kalaupun kamu isi API key, defaultnya tetap testnet
+  (uang virtual Bybit), bukan akun sungguhan.
+- Spot only, long only — tidak ada leverage/margin/futures. Short tidak mungkin
+  di spot, jadi sinyal bearish hanya memicu **exit** posisi yang sudah ada, bukan short baru.
+
+Untuk benar-benar live: set `TRADING_MODE=live`, `BYBIT_TESTNET=false`, dan isi
+`BYBIT_API_KEY`/`BYBIT_API_SECRET` di `.env`. Bot akan menolak jalan (raise error di startup)
+kalau kombinasi env-nya kontradiktif (misal `TRADING_MODE=live` tapi testnet masih `true`,
+atau live tapi API key kosong).
+
+### Risk control yang selalu aktif (tidak bisa dimatikan dari sinyal)
+
+| Kontrol | Env var | Default |
+|---|---|---|
+| Max ukuran posisi per trade | `MAX_POSITION_USD` | $50 |
+| Circuit breaker rugi harian | `MAX_DAILY_LOSS_USD` | $25 — begitu tercapai, entry baru diblokir otomatis sampai hari UTC berikutnya |
+| Max posisi terbuka bersamaan | `MAX_OPEN_POSITIONS` | 3 |
+| Risk per trade (dari balance) | `RISK_PER_TRADE_PCT` | 1% |
+| Minimum confluence score untuk entry | `MIN_CONFLUENCE_SCORE` | 6/8 |
+
+Semua posisi pakai stop-loss & take-profit berbasis ATR (`ATR_STOP_MULTIPLIER`,
+`ATR_TARGET_MULTIPLIER`) yang dihitung otomatis saat entry — bukan opsional.
+
+### Kill switch
+
+```bash
+touch KILL_SWITCH
+```
+
+Begitu file `KILL_SWITCH` ada di root project, bot **langsung berhenti membuka
+posisi baru** pada putaran berikutnya (polling, bukan instan — tunggu sampai
+`POLL_INTERVAL_SECONDS` berlalu). Posisi yang sudah terbuka tetap dikelola
+(stop-loss/take-profit tetap bisa jalan) supaya modal yang sudah di pasar tidak
+dibiarkan tanpa pengaman. Hapus file itu untuk melanjutkan.
+
+```bash
+rm KILL_SWITCH   # lanjutkan bot
+```
+
+### Jalankan
+
+```bash
+python run_bot.py
+```
+
+Semua keputusan (sinyal masuk, kena risk limit, order terkirim, posisi ditutup)
+dicatat satu baris JSON per event ke `trade_log.jsonl` — termasuk yang **ditolak**
+oleh risk manager, supaya ada jejak audit lengkap baik di dry_run maupun live.
+
+---
+
 ## Architecture
 
 ```
@@ -200,8 +265,19 @@ Claude Desktop
                ├── TechnicalEngine  (pandas-ta)
                │     └── EMA 8/21/50/200 · RSI · MACD · BB · ATR · Volume
                │
-               └── StructureEngine  (SMC/ICT)
-                     └── Swings · S/R · BOS/CHoCH · Order Blocks · FVG
+               ├── StructureEngine  (SMC/ICT)
+               │     └── Swings · S/R · BOS/CHoCH · Order Blocks · FVG
+               │
+               └── confluence_score()  — dipakai ulang oleh automation bot
+
+run_bot.py  (automation — eksekusi order sungguhan, terpisah dari MCP server)
+    │
+    └─ AutomationBot (loop polling per watchlist)
+          ├── SignalGenerator    → reuse TechnicalEngine + StructureEngine + confluence_score
+          ├── RiskManager        → kill switch, circuit breaker, position sizing, state (JSON)
+          ├── OrderExecutor      → risk check → (dry_run: simulasi | live: ccxt order)
+          ├── ExchangeClient     → wrapper ccxt.bybit (testnet toggle)
+          └── TradeLogger        → audit log JSONL (trade_log.jsonl)
 ```
 
 ---
@@ -209,10 +285,17 @@ Claude Desktop
 ## Running Tests
 
 ```bash
+python -m pytest tests/ -v
+```
+
+Atau per file:
+
+```bash
 python -m tests.test_fetcher
 python -m tests.test_technical
 python -m tests.test_structure
 python -m tests.test_mcp_tools
+python -m pytest tests/test_risk_manager.py tests/test_order_executor.py
 ```
 
 ---
