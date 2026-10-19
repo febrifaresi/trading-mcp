@@ -29,6 +29,12 @@ class ExchangeClient:
         })
 
         if config.use_testnet:
+            if not self._exchange.has.get("sandbox"):
+                raise ValueError(
+                    f"Exchange '{config.exchange_id}' tidak punya testnet/sandbox di ccxt. "
+                    f"Set EXCHANGE_TESTNET=false — jangan dibiarkan true, nanti kamu kira masih "
+                    f"testnet padahal sebenarnya sudah nyentuh exchange sungguhan."
+                )
             self._exchange.set_sandbox_mode(True)
 
     @property

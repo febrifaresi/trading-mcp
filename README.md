@@ -189,9 +189,18 @@ Combined with classic technical indicators (EMA stack, RSI, MACD, Bollinger Band
 
 Selain MCP server (analisa saja, tidak pernah eksekusi), repo ini juga punya
 **automation bot** (`run_bot.py`) yang bisa scan pasar dan **mengirim order
-sungguhan ke Bybit secara otonom** — tanpa perlu kamu di depan chat.
+sungguhan ke exchange secara otonom** — tanpa perlu kamu di depan chat.
 
 **Ini menyentuh uang asli. Baca bagian ini sebelum menyalakan apa pun.**
+
+### Exchange: Indodax (bukan Binance/Bybit)
+
+Default-nya **Indodax** — exchange crypto Indonesia yang berlisensi Bappebti.
+Binance dan Bybit sengaja tidak dipakai di sini karena keduanya terbukti
+nge-block IP Indonesia (geofencing, bukan bug) dan status legalnya untuk WNI
+ada di area abu-abu. Konsekuensinya: **Indodax tidak punya testnet**, jadi
+simulasi sebelum live sepenuhnya mengandalkan `TRADING_MODE=dry_run` (lihat
+bawah), bukan sandbox exchange sungguhan.
 
 ### Default-nya aman
 
@@ -199,15 +208,21 @@ sungguhan ke Bybit secara otonom** — tanpa perlu kamu di depan chat.
   tapi order **tidak pernah** benar-benar dikirim ke exchange. Semua disimulasikan
   dan dicatat ke `trade_log.jsonl` persis seperti kalau live, supaya kamu bisa
   evaluasi strategi dulu sebelum pakai uang sungguhan.
-- `BYBIT_TESTNET=true` — kalaupun kamu isi API key, defaultnya tetap testnet
-  (uang virtual Bybit), bukan akun sungguhan.
+- `EXCHANGE_TESTNET=false` — default, karena Indodax tidak punya testnet. Kalau
+  kamu ganti `EXECUTION_EXCHANGE` ke exchange yang punya sandbox (misal `bybit`),
+  baru boleh set ini `true`. Bot sengaja **menolak start** (raise error) kalau
+  `EXCHANGE_TESTNET=true` dipasang ke exchange yang tidak support sandbox di
+  ccxt — daripada diam-diam membiarkan kamu kira masih testnet padahal sudah
+  nyentuh exchange sungguhan.
 - Spot only, long only — tidak ada leverage/margin/futures. Short tidak mungkin
   di spot, jadi sinyal bearish hanya memicu **exit** posisi yang sudah ada, bukan short baru.
 
-Untuk benar-benar live: set `TRADING_MODE=live`, `BYBIT_TESTNET=false`, dan isi
-`BYBIT_API_KEY`/`BYBIT_API_SECRET` di `.env`. Bot akan menolak jalan (raise error di startup)
-kalau kombinasi env-nya kontradiktif (misal `TRADING_MODE=live` tapi testnet masih `true`,
-atau live tapi API key kosong).
+Untuk benar-benar live: set `TRADING_MODE=live` dan isi
+`EXCHANGE_API_KEY`/`EXCHANGE_API_SECRET` di `.env` dengan API key dari
+**indodax.com** (Menu → Trade API — bukan dari Bybit, beda exchange). Bot akan
+menolak jalan (raise error di startup) kalau kombinasi env-nya kontradiktif
+(misal `TRADING_MODE=live` tapi `EXCHANGE_TESTNET` masih `true`, atau live
+tapi API key kosong).
 
 ### Risk control yang selalu aktif (tidak bisa dimatikan dari sinyal)
 
@@ -304,7 +319,7 @@ run_bot.py  (automation — eksekusi order sungguhan, terpisah dari MCP server)
           │                         LLM cuma pilih arah — tidak pernah sentuh sizing/risk
           ├── RiskManager        → kill switch, circuit breaker, position sizing, state (JSON) — SAMA untuk rules & llm
           ├── OrderExecutor      → risk check → (dry_run: simulasi | live: ccxt order)
-          ├── ExchangeClient     → wrapper ccxt.bybit (testnet toggle)
+          ├── ExchangeClient     → wrapper ccxt generik (default: indodax; testnet toggle hanya untuk exchange yang support sandbox)
           └── TradeLogger        → audit log JSONL (trade_log.jsonl)
 ```
 

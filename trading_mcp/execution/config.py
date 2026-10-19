@@ -28,19 +28,26 @@ def _int_env(name: str, default: int) -> int:
 
 @dataclass
 class ExecutionConfig:
-    exchange_id: str = "bybit"
+    # Default: Indodax — exchange berlisensi Bappebti, tidak geo-block IP Indonesia
+    # (beda dari Binance/Bybit yang terbukti nge-block). Indodax TIDAK punya testnet.
+    exchange_id: str = "indodax"
 
     api_key: str = ""
     api_secret: str = ""
 
-    # Testnet ON secara default. Harus eksplisit di-set false untuk pakai exchange sungguhan.
-    use_testnet: bool = True
+    # Testnet OFF secara default karena exchange default (Indodax) tidak punya testnet.
+    # Kalau ganti ke exchange yang punya sandbox (misal Bybit), set true secara eksplisit.
+    # ExchangeClient akan raise error jelas kalau ini true tapi exchange-nya tidak support sandbox —
+    # lebih baik gagal keras daripada diam-diam mengira "testnet" padahal sebenarnya live.
+    use_testnet: bool = False
 
     # "dry_run" (default, tidak pernah kirim order sungguhan) atau "live".
     trading_mode: str = "dry_run"
 
     # Watchlist simbol crypto, format ccxt "BASE/QUOTE". Pisah koma di env.
-    watchlist: list[str] = field(default_factory=lambda: ["BTC/USDT", "ETH/USDT"])
+    # Indodax quote utamanya IDR — cek pasangan yang benar-benar tersedia dengan
+    # `python -c "import ccxt; print(sorted(ccxt.indodax().load_markets().keys()))"` di mesin kamu.
+    watchlist: list[str] = field(default_factory=lambda: ["BTC/IDR", "ETH/IDR"])
 
     timeframe: str = "1h"
     poll_interval_seconds: int = 300
@@ -87,10 +94,10 @@ class ExecutionConfig:
         )
 
         return cls(
-            exchange_id=os.getenv("EXECUTION_EXCHANGE", "bybit"),
-            api_key=os.getenv("BYBIT_API_KEY", ""),
-            api_secret=os.getenv("BYBIT_API_SECRET", ""),
-            use_testnet=_bool_env("BYBIT_TESTNET", True),
+            exchange_id=os.getenv("EXECUTION_EXCHANGE", "indodax"),
+            api_key=os.getenv("EXCHANGE_API_KEY", ""),
+            api_secret=os.getenv("EXCHANGE_API_SECRET", ""),
+            use_testnet=_bool_env("EXCHANGE_TESTNET", False),
             trading_mode=os.getenv("TRADING_MODE", "dry_run"),
             watchlist=watchlist,
             timeframe=os.getenv("EXECUTION_TIMEFRAME", "1h"),
@@ -129,12 +136,12 @@ class ExecutionConfig:
             return
         if not self.api_key or not self.api_secret:
             raise ValueError(
-                "TRADING_MODE=live tapi BYBIT_API_KEY/BYBIT_API_SECRET belum di-set."
+                "TRADING_MODE=live tapi EXCHANGE_API_KEY/EXCHANGE_API_SECRET belum di-set."
             )
         if self.use_testnet:
             raise ValueError(
-                "TRADING_MODE=live tapi BYBIT_TESTNET masih true — ini kontradiktif. "
-                "Set BYBIT_TESTNET=false untuk benar-benar live, atau TRADING_MODE=dry_run untuk simulasi."
+                "TRADING_MODE=live tapi EXCHANGE_TESTNET masih true — ini kontradiktif. "
+                "Set EXCHANGE_TESTNET=false untuk benar-benar live, atau TRADING_MODE=dry_run untuk simulasi."
             )
         if self.max_position_usd <= 0 or self.max_daily_loss_usd <= 0:
             raise ValueError("MAX_POSITION_USD dan MAX_DAILY_LOSS_USD harus > 0 untuk live trading.")
