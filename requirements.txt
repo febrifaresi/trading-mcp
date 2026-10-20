@@ -1,5 +1,5 @@
 yfinance>=0.2.40
-ccxt>=4.3.0
+ccxt>=4.5.88  # versi lebih lama punya has['fetchOHLCV']=None untuk Indodax (bug), bikin fetch di-skip diam-diam
 pandas>=2.0.0
 pandas-ta>=0.3.14b
 requests>=2.31.0
