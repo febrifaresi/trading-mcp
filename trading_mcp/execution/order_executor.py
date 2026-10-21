@@ -6,6 +6,8 @@ bedanya cuma apakah order_result sungguhan dikirim ke exchange atau disimulasika
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from .config import ExecutionConfig
 from .exchange_client import ExchangeClient
 from .risk_manager import RiskManager
@@ -37,6 +39,11 @@ class OrderExecutor:
             return
 
         self.logger.log_signal(symbol, signal.direction, signal.score, signal.reasons)
+
+        # Print status tiap putaran, SUKSES atau TIDAK — supaya console nggak kelihatan "diam"
+        # pas bot sebenarnya jalan normal (banyak putaran memang nggak ada aksi diambil).
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        print(f"[{now}] {symbol}: harga={signal.price:,.0f}  score={signal.score}/8  sinyal={signal.direction}")
 
         existing = self.risk_manager.get_position(symbol)
         if existing is not None:
